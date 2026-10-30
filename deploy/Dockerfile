@@ -32,9 +32,9 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# Dependências Node (npm — não exige bun)
+# Dependências Node (npm; legacy-peer-deps evita conflitos de versões antigas)
 COPY package.json ./
-RUN npm install --no-audit --no-fund
+RUN npm install --legacy-peer-deps --no-audit --no-fund
 
 # Código
 COPY next.config.ts tsconfig.json tailwind.config.ts postcss.config.mjs ./

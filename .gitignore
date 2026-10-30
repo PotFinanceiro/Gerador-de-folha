@@ -56,6 +56,6 @@ server.log
 /data/
 /db/
 /download/
-upload/*.xlsm
+/upload/
 /tool-results/
 scripts/teste/*.xlsm
