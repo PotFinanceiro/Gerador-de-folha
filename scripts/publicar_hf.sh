@@ -10,10 +10,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-source db/hf.env
+# -a exporta tudo que for carregado a seguir (necessário para o Python ler)
+set -a; source db/hf.env; set +a
 REPO="$HF_USUARIO/$HF_SPACE"
 DESTINO=/tmp/hf-space
 PY=/tmp/venv-hf/bin/python
+export REPO DESTINO
 
 # Credenciais do Turso (fora do git)
 set -a; source db/turso.env; set +a
