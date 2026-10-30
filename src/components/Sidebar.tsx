@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileSpreadsheet, Landmark, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { FileSpreadsheet, Landmark, ChevronLeft, ChevronRight, X, ShieldCheck, LogOut } from "lucide-react";
 
 /**
  * Barra lateral retrátil.
@@ -29,7 +29,13 @@ const ITENS = [
 
 const CHAVE = "folha-sidebar-aberta";
 
-export function Sidebar() {
+export function Sidebar({
+  perfil,
+  nome,
+}: {
+  perfil?: "ADMIN" | "USUARIO";
+  nome?: string;
+}) {
   const pathname = usePathname();
   const [aberta, setAberta] = useState(true); // desktop: expandida por padrão
   const [pronto, setPronto] = useState(false);
@@ -62,9 +68,20 @@ export function Sidebar() {
 
   const largura = aberta ? "md:w-60" : "md:w-[68px]";
 
+  // item de usuários aparece só para administradores
+  const itens =
+    perfil === "ADMIN"
+      ? [...ITENS, { href: "/usuarios", rotulo: "Usuários", descricao: "Cadastrar acessos", icone: ShieldCheck }]
+      : ITENS;
+
+  const sair = async () => {
+    await fetch("/api/logout", { method: "POST" });
+    location.href = "/login";
+  };
+
   // comRotulos: false → trilha só de ícones (desktop recolhido); a gaveta do celular sempre tem rótulos
   const itensNav = (comRotulos: boolean) =>
-    ITENS.map(({ href, rotulo, descricao, icone: Icone }) => {
+    itens.map(({ href, rotulo, descricao, icone: Icone }) => {
       const ligado = ativo(href);
       return (
         <Link
@@ -111,6 +128,27 @@ export function Sidebar() {
     </div>
   );
 
+  const blocoUsuario = (comRotulos: boolean) => (
+    <div className={`border-t pt-3 space-y-1 ${comRotulos ? "" : "md:flex md:justify-center md:px-2"}`}>
+      {comRotulos && nome && (
+        <p className="px-3 pb-1 text-xs text-muted-foreground truncate" title={nome}>
+          {nome}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={sair}
+        title="Sair da conta"
+        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 w-full ${
+          comRotulos ? "" : "md:justify-center md:px-2"
+        }`}
+      >
+        <LogOut className="h-5 w-5 shrink-0" aria-hidden />
+        {comRotulos && <span>Sair</span>}
+      </button>
+    </div>
+  );
+
   const alternarBtn = (
     <button
       type="button"
@@ -143,6 +181,7 @@ export function Sidebar() {
         {marca(aberta)}
         <nav className="flex-1 space-y-1">{itensNav(aberta)}</nav>
         {alternarBtn}
+        {blocoUsuario(aberta)}
       </aside>
 
       {/* ===== Celular: botão flutuante ===== */}
@@ -181,6 +220,7 @@ export function Sidebar() {
               </button>
             </div>
             <nav className="flex-1 space-y-1">{itensNav(true)}</nav>
+            {blocoUsuario(true)}
             <p className="text-[10px] text-muted-foreground text-center">
               Programa Operação Trabalho — Rede Cidadã
             </p>

@@ -11,11 +11,14 @@ import {
   resolverPython,
   verificarAmbiente,
 } from "@/lib/ambiente";
+import { lerSessao } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 800;
 
 export async function POST(req: NextRequest) {
+  if (!(await lerSessao()))
+    return NextResponse.json({ erro: "Faça login para continuar." }, { status: 401 });
   try {
     const form = await req.formData();
     const file = form.get("arquivo") as File | null;

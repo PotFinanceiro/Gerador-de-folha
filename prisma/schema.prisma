@@ -13,20 +13,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
+model Usuario {
   id        String   @id @default(cuid())
+  nome      String
   email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  senhaHash String
+  perfil    String   @default("USUARIO") // ADMIN | USUARIO
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
 }

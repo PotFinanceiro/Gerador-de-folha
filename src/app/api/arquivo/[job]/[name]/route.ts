@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import { GERADOS_ROOT } from "@/lib/ambiente";
+import { lerSessao } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,8 @@ export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ job: string; name: string }> }
 ) {
+  if (!(await lerSessao()))
+    return NextResponse.json({ erro: "Faça login para continuar." }, { status: 401 });
   const { job, name } = await ctx.params;
   if (!/^[a-f0-9-]{10,64}$/i.test(job) || /[\\/]/.test(name)) {
     return new NextResponse("Requisição inválida", { status: 400 });
