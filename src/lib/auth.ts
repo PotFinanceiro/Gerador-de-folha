@@ -102,7 +102,7 @@ export async function garantirAdminInicial() {
     await db.usuario.create({
       data: {
         nome: "Administrador",
-        email: "admin@waycode.com",
+        email: "wagnerlima378@gmail.com",
         senhaHash: hashSenha("Admin@123"),
         perfil: "ADMIN",
       },
