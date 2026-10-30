@@ -1,7 +1,14 @@
-# Folha de Ponto — Subprefeitura Sé
+# Programa Operação Trabalho — Rede Cidadã · By WayCode
+# VPS próprio (usar quando houver verba — migração direta da versão gratuita)
+#
 # Uso (a partir da raiz do projeto):
 #   docker compose -f deploy/docker-compose.yml up -d --build
 # O sistema fica em http://localhost:3000
+#
+# Banco de dados: por padrão usa SQLite local (volume folha-data).
+# Para usar o Turso (banco na nuvem, como na hospedagem gratuita),
+# defina TURSO_DATABASE_URL e TURSO_AUTH_TOKEN no ambiente ou num .env
+# ao lado deste arquivo.
 services:
   folha-ponto:
     build:
@@ -10,6 +17,11 @@ services:
     container_name: folha-ponto
     ports:
       - "3000:3000"
+    environment:
+      - TURSO_DATABASE_URL=${TURSO_DATABASE_URL:-}
+      - TURSO_AUTH_TOKEN=${TURSO_AUTH_TOKEN:-}
+      - SESSAO_SEGREDO=${SESSAO_SEGREDO:-}
+      - ADMIN_SENHA_INICIAL=${ADMIN_SENHA_INICIAL:-}
     volumes:
       - folha-data:/app/data
     restart: unless-stopped

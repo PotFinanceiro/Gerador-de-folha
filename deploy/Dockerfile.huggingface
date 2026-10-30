@@ -1,0 +1,62 @@
+# =============================================================
+#  Programa Operação Trabalho — Rede Cidadã · By WayCode
+#  Dockerfile para HUGGING FACE SPACES (hospedagem gratuita, sem cartão)
+#
+#  Diferenças em relação ao deploy/Dockerfile (VPS próprio):
+#    - porta 7860 (exigida pelo HF Spaces)
+#    - roda como usuário 1000 (exigência de segurança do HF)
+#    - banco de dados vem de fora (Turso) via variáveis de ambiente
+#
+#  Segretos definidos nas configurações do Space (Variables and secrets):
+#    TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, SESSAO_SEGREDO, ADMIN_SENHA_INICIAL
+# =============================================================
+FROM node:22-slim
+
+# LibreOffice Writer converte DOCX -> PDF; Carlito tem as métricas da fonte Calibri
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-venv \
+        libreoffice-writer \
+        fonts-crosextra-carlito fonts-dejavu-core \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Ambiente Python isolado com as dependências do gerador (openpyxl, pypdf)
+COPY python/requirements.txt /tmp/requirements.txt
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
+    && ln -s /opt/venv/bin/python /usr/local/bin/python3
+
+ENV NODE_ENV=production \
+    PYTHON_BIN=/opt/venv/bin/python \
+    SOFFICE_BIN=soffice \
+    FOLHA_ROOT=/app \
+    HOME=/home/user \
+    PORT=7860 \
+    HOSTNAME=0.0.0.0
+
+# HF Spaces executa o contêiner como usuário 1000
+RUN useradd -m -u 1000 user
+
+WORKDIR /app
+
+# Dependências Node
+COPY package.json ./
+RUN npm install --no-audit --no-fund
+
+# Código
+COPY next.config.ts tsconfig.json tailwind.config.ts postcss.config.mjs ./
+COPY prisma ./prisma
+RUN npx prisma generate
+COPY src ./src
+COPY public ./public
+COPY python ./python
+
+# Build do Next.js (standalone) + ajustes de estáticos
+RUN npm run build
+
+# Pasta de trabalho transitória (uploads e PDFs gerados por sessão)
+RUN mkdir -p /app/data/gerados && chown -R user:user /app /home/user
+USER user
+
+EXPOSE 7860
+CMD ["node", ".next/standalone/server.js"]

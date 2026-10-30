@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import fs from "fs";
 import path from "path";
-import { db } from "@/lib/db";
+import { db, bancoPronto } from "@/lib/db";
 
 export type Perfil = "ADMIN" | "USUARIO";
 export type Sessao = { id: string; nome: string; email: string; perfil: Perfil };
@@ -98,12 +98,14 @@ export async function exigirAdmin() {
 /* ---------- admin inicial (só quando o banco está vazio) ---------- */
 
 export async function garantirAdminInicial() {
+  await bancoPronto(); // garante a estrutura do banco (necessário no Turso)
   if ((await db.usuario.count()) === 0) {
     await db.usuario.create({
       data: {
         nome: "Administrador",
         email: "wagnerlima378@gmail.com",
-        senhaHash: hashSenha("Admin@123"),
+        // Em produção na nuvem, defina ADMIN_SENHA_INICIAL como segredo.
+        senhaHash: hashSenha(process.env.ADMIN_SENHA_INICIAL || "Admin@123"),
         perfil: "ADMIN",
       },
     });
