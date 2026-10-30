@@ -1,0 +1,25 @@
+# =============================================================
+#  Programa Operação Trabalho — Rede Cidadã · By WayCode
+#  Blueprint do Render (hospedagem gratuita, sem cartão)
+#
+#  No Render: New + → Blueprint → selecione o repositório
+#  waycode-deploy → os segredos pedidos são os valores do Turso.
+# =============================================================
+services:
+  - type: web
+    name: operacao-trabalho
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile
+    plan: free
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: SESSAO_SEGREDO
+        generateValue: true
+      - key: ADMIN_SENHA_INICIAL
+        sync: false
