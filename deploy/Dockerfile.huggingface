@@ -26,8 +26,10 @@ RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
     && ln -s /opt/venv/bin/python /usr/local/bin/python3
 
-ENV NODE_ENV=production \
-    PYTHON_BIN=/opt/venv/bin/python \
+# ATENÇÃO: NODE_ENV=production NÃO pode estar definido nesta fase!
+# Com ele ativo, o npm pula as devDependencies (typescript, tailwindcss,
+# @tailwindcss/postcss) e o "next build" falha na nuvem.
+ENV PYTHON_BIN=/opt/venv/bin/python \
     SOFFICE_BIN=soffice \
     FOLHA_ROOT=/app \
     HOME=/home/user \
@@ -41,7 +43,7 @@ WORKDIR /app
 
 # Dependências Node (npm; legacy-peer-deps evita conflitos de versões antigas)
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci --legacy-peer-deps --no-audit --no-fund
+RUN npm ci --legacy-peer-deps --include=dev --no-audit --no-fund
 
 # Código
 COPY next.config.ts tsconfig.json tailwind.config.ts postcss.config.mjs ./
@@ -58,6 +60,12 @@ ENV DATABASE_URL="file:/tmp/folha-build.db"
 
 # Build do Next.js (standalone) + ajustes de estáticos
 RUN npm run build
+
+# NODE_ENV só a partir daqui: em tempo de execução o modo produção é
+# necessário (o servidor standalone do Next lê esta variável), mas se
+# estivesse ativo antes do "npm ci", as devDependencies não seriam
+# instaladas e o build acima quebraria.
+ENV NODE_ENV=production
 
 # Pasta de trabalho transitória (uploads e PDFs gerados por sessão)
 RUN mkdir -p /app/data/gerados && chown -R user:user /app /home/user
