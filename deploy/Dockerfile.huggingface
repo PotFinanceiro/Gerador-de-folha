@@ -51,6 +51,11 @@ COPY src ./src
 COPY public ./public
 COPY python ./python
 
+# URL de banco usada apenas DURANTE o build — o Prisma exige uma definida
+# quando o Next importa os módulos. Em execução o banco real é o Turso
+# (variáveis TURSO_*), nunca este arquivo.
+ENV DATABASE_URL="file:/tmp/folha-build.db"
+
 # Build do Next.js (standalone) + ajustes de estáticos
 RUN npm run build
 
