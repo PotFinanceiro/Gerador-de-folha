@@ -1,4 +1,4 @@
-﻿Write-Host "===================================================" -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host "  Publicando Projeto no GitHub: Gerador-de-folha" -ForegroundColor Cyan
 Write-Host "  Conta: PotFinanceiro (potfinanceiro.adm@gmail.com)" -ForegroundColor Cyan
 Write-Host "===================================================" -ForegroundColor Cyan
@@ -34,3 +34,4 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "  janela do navegador que abrir." -ForegroundColor Red
     Write-Host "===================================================" -ForegroundColor Red
 }
+
