@@ -12,14 +12,22 @@ import {
   resolverPython,
   verificarAmbiente,
 } from "@/lib/ambiente";
-import { lerSessao } from "@/lib/auth";
+import { criarClienteServidor } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 800;
 
 export async function POST(req: NextRequest) {
-  if (!(await lerSessao()))
+  // 1. Validação de Sessão via Supabase
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
     return NextResponse.json({ erro: "Faça login para continuar." }, { status: 401 });
+  }
+
   try {
     const form = await req.formData();
     const file = form.get("arquivo") as File | null;
@@ -46,7 +54,65 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Pré-voo: Python + dependências + LibreOffice + template da carta
+    const workerUrl = process.env.WORKER_URL?.replace(/\/$/, "");
+
+    // =========================================================================
+    // MODO 1: PROCESSAMENTO VIA WORKER DESACOPLADO (Recomendado / Vercel)
+    // =========================================================================
+    if (workerUrl) {
+      const workerForm = new FormData();
+      workerForm.append("arquivo", file);
+      workerForm.append("data", data);
+      if (assinatura && assinatura.size > 0) {
+        workerForm.append("assinatura", assinatura);
+      }
+
+      const headers: Record<string, string> = {};
+      if (process.env.WORKER_SECRET_TOKEN) {
+        headers["Authorization"] = `Bearer ${process.env.WORKER_SECRET_TOKEN}`;
+      }
+
+      const respWorker = await fetch(`${workerUrl}/processar-carta`, {
+        method: "POST",
+        body: workerForm,
+        headers,
+      });
+
+      const workerData = await respWorker.json().catch(() => ({}));
+      if (!respWorker.ok || !workerData.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            erro: workerData.detail || workerData.erro || "Falha no worker de processamento de cartas.",
+          },
+          { status: 500 }
+        );
+      }
+
+      const jobId = workerData.job_id;
+      const resumo = workerData.resumo;
+
+      // Registra o job no Supabase para auditoria e histórico
+      try {
+        await supabase.from("jobs").insert({
+          id: jobId,
+          usuario_id: user.id,
+          tipo: "CARTA_BANCO",
+          status: "CONCLUIDO",
+          data_carta: data,
+          arquivo_entrada_path: nome,
+          total_beneficiarios: resumo.total || 0,
+          resumo,
+          finalizado_em: new Date().toISOString(),
+        });
+      } catch {}
+
+      return NextResponse.json({ ...resumo, jobId });
+    }
+
+    // =========================================================================
+    // MODO 2: PROCESSAMENTO LOCAL (Fallback se WORKER_URL não estiver configurado)
+    // =========================================================================
     const ambiente = verificarAmbiente();
     if (!ambiente.ok) {
       return NextResponse.json({ ok: false, erro: ambiente.erro }, { status: 500 });
@@ -79,7 +145,6 @@ export async function POST(req: NextRequest) {
       ...(assinatura ? ["--assinatura", path.join(outDir, "assinatura.png")] : []),
     ];
 
-    // HOME gravável é necessário para o perfil do LibreOffice
     const home = process.env.HOME || path.join(DATA_ROOT, ".home");
     await fs.mkdir(home, { recursive: true }).catch(() => {});
 
@@ -128,6 +193,22 @@ export async function POST(req: NextRequest) {
     }
 
     const resumo = JSON.parse(await fs.readFile(path.join(outDir, "resumo.json"), "utf-8"));
+
+    // Registra no Supabase
+    try {
+      await supabase.from("jobs").insert({
+        id: jobId,
+        usuario_id: user.id,
+        tipo: "CARTA_BANCO",
+        status: "CONCLUIDO",
+        data_carta: data,
+        arquivo_entrada_path: nome,
+        total_beneficiarios: resumo.total || 0,
+        resumo,
+        finalizado_em: new Date().toISOString(),
+      });
+    } catch {}
+
     return NextResponse.json({ ...resumo, jobId });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Erro inesperado.";

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, LogIn } from "lucide-react";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 export default function PaginaLogin() {
   const router = useRouter();
@@ -19,19 +20,50 @@ export default function PaginaLogin() {
     e.preventDefault();
     setErro("");
     setEntrando(true);
-    const r = await fetch("/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, senha }),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      setErro(d.erro || "Não foi possível entrar.");
+
+    try {
+      // 1. Tenta autenticar via Supabase Auth
+      const supabase = criarClienteNavegador();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: senha,
+      });
+
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          setErro("Email ou senha incorretos.");
+        } else if (error.message.includes("Email not confirmed")) {
+          setErro("Email ainda não confirmado. Verifique sua caixa de entrada.");
+        } else {
+          setErro(error.message || "Não foi possível autenticar.");
+        }
+        setEntrando(false);
+        return;
+      }
+
+      if (data?.user) {
+        // Verifica se o perfil do usuário está ativo
+        const { data: perfil } = await supabase
+          .from("perfis")
+          .select("ativo")
+          .eq("id", data.user.id)
+          .single();
+
+        if (perfil && !perfil.ativo) {
+          await supabase.auth.signOut();
+          setErro("Este usuário foi desativado pelo administrador.");
+          setEntrando(false);
+          return;
+        }
+
+        router.replace("/folhas-de-ponto");
+        router.refresh();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro inesperado ao conectar.";
+      setErro(msg);
       setEntrando(false);
-      return;
     }
-    router.replace("/folhas-de-ponto");
-    router.refresh();
   };
 
   return (
@@ -61,45 +93,52 @@ export default function PaginaLogin() {
               <AlertDescription>{erro}</AlertDescription>
             </Alert>
           )}
+
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
-              autoComplete="username"
+              required
+              autoComplete="email"
+              placeholder="seu.email@exemplo.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="seu@email.com"
-              required
+              disabled={entrando}
             />
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="senha">Senha</Label>
             <Input
               id="senha"
               type="password"
+              required
               autoComplete="current-password"
+              placeholder="••••••••"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              placeholder="••••••••"
-              required
+              disabled={entrando}
             />
           </div>
-          <Button type="submit" className="w-full" disabled={entrando}>
+
+          <Button type="submit" className="w-full gap-2 cursor-pointer" disabled={entrando}>
             {entrando ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Entrando…
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Entrando…
               </>
             ) : (
               <>
-                <LogIn className="h-4 w-4" aria-hidden /> Entrar
+                <LogIn className="h-4 w-4" />
+                Entrar no sistema
               </>
             )}
           </Button>
         </form>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Acesso restrito à equipe do programa.
+          Acesso restrito à equipe autorizada.
         </p>
       </div>
     </div>

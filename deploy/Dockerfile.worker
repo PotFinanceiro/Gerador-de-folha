@@ -1,0 +1,42 @@
+# =============================================================
+#  Worker Gerador de Documentos — Python + LibreOffice
+#  Microserviço desacoplado para execução em Cloud Run, Railway, Render ou VPS
+# =============================================================
+FROM python:3.11-slim
+
+# Dependências de sistema:
+# - libreoffice-writer: conversão de DOCX para PDF com fidelidade
+# - poppler-utils: utilitário pdftoppm para gerar imagens de preview PNG
+# - fonts-crosextra-carlito: fonte com as métricas exatas da Calibri
+# - fonts-dejavu-core: fontes complementares seguras
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libreoffice-writer \
+        poppler-utils \
+        fonts-crosextra-carlito \
+        fonts-dejavu-core \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONUNBUFFERED=1 \
+    SOFFICE_BIN=soffice \
+    HOME=/lo-home \
+    PORT=8000 \
+    HOST=0.0.0.0 \
+    STORAGE_DIR=/app/jobs_storage
+
+WORKDIR /app
+
+# Instala dependências do Python
+COPY python/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Copia código e templates do motor
+COPY python/ /app/
+
+# Cria pasta de armazenamento e perfil do LibreOffice
+RUN mkdir -p /app/jobs_storage /lo-home
+
+EXPOSE 8000
+
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+

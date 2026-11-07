@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FileSpreadsheet, Landmark, ChevronLeft, ChevronRight, X, ShieldCheck, LogOut } from "lucide-react";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 /**
  * Barra lateral retrátil.
@@ -75,7 +76,11 @@ export function Sidebar({
       : ITENS;
 
   const sair = async () => {
-    await fetch("/api/logout", { method: "POST" });
+    try {
+      const supabase = criarClienteNavegador();
+      await supabase.auth.signOut();
+    } catch {}
+    await fetch("/api/logout", { method: "POST" }).catch(() => {});
     location.href = "/login";
   };
 

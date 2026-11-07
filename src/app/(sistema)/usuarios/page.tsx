@@ -1,11 +1,29 @@
 import { redirect } from "next/navigation";
-import { lerSessao } from "@/lib/auth";
+import { criarClienteServidor } from "@/lib/supabase/server";
 import { PainelUsuarios } from "./PainelUsuarios";
 
 export const metadata = { title: "Usuários — Rede Cidadã · By WayCode" };
 
 export default async function PaginaUsuarios() {
-  const sessao = await lerSessao();
-  if (!sessao || sessao.perfil !== "ADMIN") redirect("/folhas-de-ponto");
-  return <PainelUsuarios euId={sessao.id} />;
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  // Verifica se o usuário autenticado é realmente ADMIN
+  const { data: perfil } = await supabase
+    .from("perfis")
+    .select("perfil")
+    .eq("id", user.id)
+    .single();
+
+  if (perfil?.perfil !== "ADMIN") {
+    redirect("/folhas-de-ponto");
+  }
+
+  return <PainelUsuarios euId={user.id} />;
 }

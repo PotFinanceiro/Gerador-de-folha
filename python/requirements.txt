@@ -1,3 +1,9 @@
 # Dependências do gerador de folhas de ponto (Python 3.9+)
 openpyxl>=3.1,<4
 pypdf>=4.0,<7
+
+# Microserviço HTTP (Worker API)
+fastapi>=0.110.0,<1.0.0
+uvicorn>=0.28.0,<1.0.0
+python-multipart>=0.0.9
+requests>=2.31.0,<3.0.0
