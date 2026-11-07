@@ -1,13 +1,12 @@
 /**
  * Diagnóstico + reset da senha do admin.
- * 1. Testa candidatos ("Admin@123" e a documentada) contra os hashes Turso/local.
- * 2. Redefine a senha do admin para o valor documentado em db/turso.env
- *    (ADMIN_SENHA_INICIAL) em AMBOS os bancos — Turso e local.
+ * Redefine a senha para o valor documentado (ADMIN_SENHA_INICIAL) no banco local
+ * e, se db/turso.env existir, também no Turso.
  * Rodar: bun scripts/resetar_senha_admin.ts
  */
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { scryptSync, timingSafeEqual, randomBytes } from "crypto";
 import { Database } from "bun:sqlite";
 
@@ -20,7 +19,8 @@ function carregarEnv(caminho: string) {
   );
 }
 
-const env = carregarEnv("db/turso.env");
+const temTurso = existsSync("db/turso.env");
+const env = temTurso ? carregarEnv("db/turso.env") : {};
 const SENHA = env.ADMIN_SENHA_INICIAL ?? "Wayaa3f68919925@30";
 const EMAIL = "wagnerlima378@gmail.com";
 
@@ -38,15 +38,20 @@ function hashSenha(senha: string) {
 }
 
 /* ---------- 1. Diagnóstico ---------- */
-const dbTurso = new PrismaClient({
-  adapter: new PrismaLibSQL({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN }),
-});
-const adminTurso = await dbTurso.usuario.findUnique({ where: { email: EMAIL } });
 console.log("=== DIAGNÓSTICO ===");
-if (adminTurso) {
-  console.log(`Turso: hash=${adminTurso.senhaHash.slice(0, 12)}...`);
-  console.log(`  "Admin@123"     → ${conferir("Admin@123", adminTurso.senhaHash) ? "✓ CONFERE (foi re-semeado com fallback!)" : "✗"}`);
-  console.log(`  senha documentada → ${conferir(SENHA, adminTurso.senhaHash) ? "✓ CONFERE" : "✗"}`);
+let dbTurso: PrismaClient | null = null;
+if (temTurso) {
+  dbTurso = new PrismaClient({
+    adapter: new PrismaLibSQL({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN }),
+  });
+  const adminTurso = await dbTurso.usuario.findUnique({ where: { email: EMAIL } });
+  if (adminTurso) {
+    console.log(`Turso: hash=${adminTurso.senhaHash.slice(0, 12)}...`);
+    console.log(`  "Admin@123"     → ${conferir("Admin@123", adminTurso.senhaHash) ? "✓ CONFERE (foi re-semeado com fallback!)" : "✗"}`);
+    console.log(`  senha documentada → ${conferir(SENHA, adminTurso.senhaHash) ? "✓ CONFERE" : "✗"}`);
+  }
+} else {
+  console.log("Turso: INDISPONÍVEL (db/turso.env não existe — modo só-local)");
 }
 const dbLocal = new Database("db/custom.db", { readonly: true });
 const adminLocal = dbLocal.query("SELECT email, senhaHash FROM Usuario WHERE email=?").get(EMAIL) as any;
@@ -55,19 +60,23 @@ if (adminLocal) {
   console.log(`  "Admin@123"     → ${conferir("Admin@123", adminLocal.senhaHash) ? "✓ CONFERE" : "✗"}`);
   console.log(`  senha documentada → ${conferir(SENHA, adminLocal.senhaHash) ? "✓ CONFERE" : "✗"}`);
 }
+dbLocal.close();
 
 /* ---------- 2. Reset para a senha documentada ---------- */
 console.log("\n=== RESET ===");
 const novoHash = hashSenha(SENHA);
-await dbTurso.usuario.update({ where: { email: EMAIL }, data: { senhaHash: novoHash, ativo: true } });
-console.log(`Turso: senha redefinida ✓ (hash ${novoHash.slice(0, 12)}...)`);
-
+if (dbTurso) {
+  await dbTurso.usuario.update({ where: { email: EMAIL }, data: { senhaHash: novoHash, ativo: true } });
+  console.log(`Turso: senha redefinida ✓ (hash ${novoHash.slice(0, 12)}...)`);
+}
 const dbW = new Database("db/custom.db");
 dbW.query("UPDATE Usuario SET senhaHash=? WHERE email=?").run(novoHash, EMAIL);
 dbW.close();
-console.log(`Local: senha redefinida ✓ (mesmo hash)`);
+console.log(`Local: senha redefinida ✓ (hash ${novoHash.slice(0, 12)}...)`);
 
 /* ---------- 3. Confirmação ---------- */
-const depois = await dbTurso.usuario.findUnique({ where: { email: EMAIL } });
-console.log(`\nConfirmação Turso: ${conferir(SENHA, depois!.senhaHash) ? "✓ senha documentada CONFERE agora" : "✗ FALHOU"}`);
+const dbC = new Database("db/custom.db", { readonly: true });
+const depois = dbC.query("SELECT senhaHash FROM Usuario WHERE email=?").get(EMAIL) as any;
+dbC.close();
+console.log(`\nConfirmação local: ${conferir(SENHA, depois.senhaHash) ? "✓ senha documentada CONFERE agora" : "✗ FALHOU"}`);
 console.log(`Login será: ${EMAIL} / ${SENHA}`);
