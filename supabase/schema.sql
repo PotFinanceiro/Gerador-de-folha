@@ -55,7 +55,7 @@ create policy "Admins podem atualizar perfis"
 
 -- ==============================================================================
 -- 3. TRIGGER AUTOMÁTICO: CRIAR PERFIL AO REGISTRAR NO AUTH
--- Toda vez que um usuário for criado no Supabase Auth, cria a linha em public.perfis.
+  -- Toda vez que um usuário for criado no Supabase Auth, cria a linha em public.perfis.
 -- ==============================================================================
 create or replace function public.tratar_novo_usuario()
 returns trigger

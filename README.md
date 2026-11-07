@@ -105,3 +105,4 @@ SUPABASE_SERVICE_ROLE_KEY=sua-chave-service-role-secreta
 # Worker de Processamento
 WORKER_URL=http://localhost:8000
 ```
+
