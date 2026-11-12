@@ -27,11 +27,11 @@ ENV HOME=/home/user \
 WORKDIR /home/user/app
 
 # Instalação das dependências Python
-COPY --chown=user:user python/requirements.txt /home/user/app/requirements.txt
+COPY --chown=user:user requirements.txt /home/user/app/requirements.txt
 RUN pip install --no-cache-dir --user -r /home/user/app/requirements.txt
 
 # Copia os motores e templates de documentos
-COPY --chown=user:user python/ /home/user/app/
+COPY --chown=user:user . /home/user/app/
 
 RUN mkdir -p /home/user/jobs_storage
 
