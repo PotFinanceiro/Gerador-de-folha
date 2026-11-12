@@ -1,56 +1,34 @@
-# Guia de Configuração: Supabase, Vercel e Worker
+# Guia de Implantação: Vercel + Supabase (100% Serverless & Gratuito)
 
-Este guia contém as instruções passo a passo para conectar o sistema quando você for criar o banco de dados no **Supabase** e publicar o frontend na **Vercel**.
+Este projeto foi reestruturado para funcionar **exclusivamente com Vercel e Supabase**, sem necessidade de servidores externos, containers ou cadastro de cartão de crédito.
 
----
-
-## 1. Configurando o Supabase
-
-1. Crie uma conta ou acesse [supabase.com](https://supabase.com).
-2. Clique em **"New Project"** e escolha um nome e senha forte para o banco de dados.
-3. No menu lateral esquerdo, vá em **SQL Editor**.
-4. Abra o arquivo [`supabase/schema.sql`](./supabase/schema.sql) deste projeto, copie todo o conteúdo, cole no SQL Editor do Supabase e clique em **"Run"**.
-   * *Isso criará as tabelas `perfis` e `jobs`, as regras de RLS, as triggers automáticas e os buckets de storage.*
-5. No menu lateral, acesse **Project Settings** (ícone de engrenagem) > **API**:
-   * Copie o **Project URL** (`https://xxxxxxxx.supabase.co`).
-   * Copie o **anon public key** (`eyJhbGci...`).
-   * Copie o **service_role secret key** (`eyJhbGci...` — nunca compartilhe publicamente).
+Toda a leitura de planilhas (`.xlsx` / `.xlsm`), geração de PDFs individuais (Folhas de Ponto e Cartas de Banco), criação de prévias visuais e compactação `.zip` rodam **nativamente em TypeScript/Node.js** dentro das funções Serverless da Vercel, com armazenamento seguro no **Supabase Storage**.
 
 ---
 
-## 2. Publicando o Worker Python (Motor de Documentos)
+## Arquitetura Final
 
-Como a Vercel não possui LibreOffice/Python, o motor de documentos roda de forma isolada através do container que preparamos:
-
-* **Onde hospedar:**
-  * **Google Cloud Run (Recomendado / Custo zero quando ocioso):**
-    * Suba a imagem Docker usando [`deploy/Dockerfile.worker`](./deploy/Dockerfile.worker).
-    * Defina a porta como `8000`.
-  * **Railway ou Render:**
-    * Crie um novo serviço do tipo Docker apontando para o arquivo `deploy/Dockerfile.worker`.
-* Após a publicação, você receberá a URL do worker (ex.: `https://worker-folha-xyz.run.app`).
+1. **Vercel (Frontend Next.js + API Serverless em TypeScript):**
+   - Interface do usuário (Folhas de Ponto, Emitir Carta e Painel de Usuários).
+   - Processamento nativo de planilhas (`xlsx`), geração de PDFs (`pdf-lib`) e pacotes `.zip` (`jszip`).
+2. **Supabase (Autenticação + Banco PostgreSQL + Storage):**
+   - **Supabase Auth:** Login seguro com e-mail e senha.
+   - **PostgreSQL (`public.perfis` e `public.jobs`):** Controle de acesso (`ADMIN` / `USUARIO`) com Row Level Security (RLS) e histórico de lotes gerados.
+   - **Supabase Storage (`documentos-gerados`):** Armazena os pacotes `.zip` e prévias geradas.
 
 ---
 
-## 3. Publicando o Frontend na Vercel
+## Como Publicar na Vercel (Passo a Passo)
 
-1. Acesse [vercel.com](https://vercel.com) e conecte o repositório GitHub do projeto.
-2. Na tela de configuração do projeto na Vercel, abra a seção **Environment Variables** e adicione as 4 variáveis:
+1. Acesse [https://vercel.com](https://vercel.com) e entre com sua conta do **GitHub**.
+2. Clique em **Add New... > Project** e importe o repositório **`PotFinanceiro/Gerador-de-folha`**.
+3. Na seção **Environment Variables**, adicione exatamente estas **3 variáveis**:
 
-| Variável | Valor |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | A URL do seu projeto Supabase |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | A chave anônima pública do Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | A chave secreta `service_role` do Supabase |
-| `WORKER_URL` | A URL do seu Worker Python publicado |
+   | Nome da Variável | Valor |
+   | :--- | :--- |
+   | `NEXT_PUBLIC_SUPABASE_URL` | `https://ssssnijlwudfhdvssjpz.supabase.co` |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_ovsyd_aVjosGR5Ihm98Nkg_c6N2LNA1` |
+   | `SUPABASE_SERVICE_ROLE_KEY` | `<sua-chave-secreta-do-supabase-ou-veja-o-arquivo-.env.local>` |
 
-3. Clique em **Deploy**.
-
----
-
-## 4. Primeiro Acesso
-
-1. Acesse a URL gerada pela Vercel.
-2. Como o banco de dados estará novo, o **primeiro usuário que fizer cadastro/login no Supabase Auth se tornará automaticamente `ADMIN`** (através da trigger configurada em `schema.sql`).
-3. Uma vez logado como `ADMIN`, você terá acesso ao menu **Usuários** para cadastrar novos operadores, trocar senhas e definir permissões.
-
+4. Clique em **Deploy**.
+5. Assim que o deploy terminar (cerca de 1 a 2 minutos), acesse a URL gerada pela Vercel e faça login com o e-mail `potfinanceiro.adm@gmail.com` e a senha que você cadastrou no Supabase!

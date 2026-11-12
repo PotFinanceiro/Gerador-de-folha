@@ -1,4 +1,4 @@
-Write-Host "===================================================" -ForegroundColor Cyan
+﻿Write-Host "===================================================" -ForegroundColor Cyan
 Write-Host "  Publicando Projeto no GitHub: Gerador-de-folha" -ForegroundColor Cyan
 Write-Host "  Conta: PotFinanceiro (potfinanceiro.adm@gmail.com)" -ForegroundColor Cyan
 Write-Host "===================================================" -ForegroundColor Cyan
@@ -15,7 +15,7 @@ Write-Host "3. Adicionando arquivos..." -ForegroundColor Yellow
 git add .
 
 Write-Host "4. Criando commit com a reestruturação..." -ForegroundColor Yellow
-git commit -m "feat: reestruturacao completa para Vercel e Supabase com worker desacoplado"
+git commit --amend -m "feat: motor nativo TypeScript 100% Vercel + Supabase sem servicos externos"
 
 Write-Host "5. Enviando para o GitHub..." -ForegroundColor Yellow
 git branch -M main

@@ -1,21 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "child_process";
-import { promises as fs } from "fs";
-import path from "path";
 import crypto from "crypto";
-import {
-  PROJECT_ROOT,
-  DATA_ROOT,
-  GERADOS_ROOT,
-  CARTA_SCRIPT,
-  CARTA_TEMPLATE,
-  resolverPython,
-  verificarAmbiente,
-} from "@/lib/ambiente";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { gerarCartasBancoTS } from "@/lib/gerador/cartas";
+import { salvarArquivosJob } from "@/lib/gerador/storage";
 
 export const runtime = "nodejs";
-export const maxDuration = 800;
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   // 1. Validação de Sessão via Supabase
@@ -54,147 +44,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const workerUrl = process.env.WORKER_URL?.replace(/\/$/, "");
-
-    // =========================================================================
-    // MODO 1: PROCESSAMENTO VIA WORKER DESACOPLADO (Recomendado / Vercel)
-    // =========================================================================
-    if (workerUrl) {
-      const workerForm = new FormData();
-      workerForm.append("arquivo", file);
-      workerForm.append("data", data);
-      if (assinatura && assinatura.size > 0) {
-        workerForm.append("assinatura", assinatura);
-      }
-
-      const headers: Record<string, string> = {};
-      if (process.env.WORKER_SECRET_TOKEN) {
-        headers["Authorization"] = `Bearer ${process.env.WORKER_SECRET_TOKEN}`;
-      }
-
-      const respWorker = await fetch(`${workerUrl}/processar-carta`, {
-        method: "POST",
-        body: workerForm,
-        headers,
-      });
-
-      const workerData = await respWorker.json().catch(() => ({}));
-      if (!respWorker.ok || !workerData.ok) {
-        return NextResponse.json(
-          {
-            ok: false,
-            erro: workerData.detail || workerData.erro || "Falha no worker de processamento de cartas.",
-          },
-          { status: 500 }
-        );
-      }
-
-      const jobId = workerData.job_id;
-      const resumo = workerData.resumo;
-
-      // Registra o job no Supabase para auditoria e histórico
-      try {
-        await supabase.from("jobs").insert({
-          id: jobId,
-          usuario_id: user.id,
-          tipo: "CARTA_BANCO",
-          status: "CONCLUIDO",
-          data_carta: data,
-          arquivo_entrada_path: nome,
-          total_beneficiarios: resumo.total || 0,
-          resumo,
-          finalizado_em: new Date().toISOString(),
-        });
-      } catch {}
-
-      return NextResponse.json({ ...resumo, jobId });
-    }
-
-    // =========================================================================
-    // MODO 2: PROCESSAMENTO LOCAL (Fallback se WORKER_URL não estiver configurado)
-    // =========================================================================
-    const ambiente = verificarAmbiente();
-    if (!ambiente.ok) {
-      return NextResponse.json({ ok: false, erro: ambiente.erro }, { status: 500 });
-    }
-    if (!(await fs.stat(CARTA_TEMPLATE).catch(() => null))) {
-      return NextResponse.json(
-        { ok: false, erro: `Template da carta não encontrado em ${CARTA_TEMPLATE}.` },
-        { status: 500 }
-      );
-    }
-    const python = resolverPython();
-    if (!python.bin) {
-      return NextResponse.json({ ok: false, erro: python.erro }, { status: 500 });
-    }
-
     const jobId = crypto.randomUUID();
-    const outDir = path.join(GERADOS_ROOT, jobId);
-    await fs.mkdir(outDir, { recursive: true });
-    const upPath = path.join(outDir, `entrada${path.extname(nome)}`);
-    await fs.writeFile(upPath, Buffer.from(await file.arrayBuffer()));
-    if (assinatura) {
-      await fs.writeFile(path.join(outDir, "assinatura.png"), Buffer.from(await assinatura.arrayBuffer()));
-    }
+    const arquivoBuffer = Buffer.from(await file.arrayBuffer());
+    const assinaturaBuffer =
+      assinatura && assinatura.size > 0 ? Buffer.from(await assinatura.arrayBuffer()) : null;
 
-    const args = [
-      CARTA_SCRIPT,
-      "--entrada", upPath,
-      "--saida", outDir,
-      "--data", data,
-      ...(assinatura ? ["--assinatura", path.join(outDir, "assinatura.png")] : []),
-    ];
-
-    const home = process.env.HOME || path.join(DATA_ROOT, ".home");
-    await fs.mkdir(home, { recursive: true }).catch(() => {});
-
-    const proc = spawn(python.bin, args, {
-      cwd: PROJECT_ROOT,
-      env: { ...process.env, HOME: home, SOFFICE_BIN: process.env.SOFFICE_BIN || "soffice" },
+    // 2. Processamento 100% Nativo em TypeScript (Serverless / Vercel)
+    const { zipBuffer, previewBuffer, previewNome, resumo } = await gerarCartasBancoTS({
+      arquivoBuffer,
+      dataIso: data,
+      assinaturaBuffer,
     });
 
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => (stdout += d.toString()));
-    proc.stderr.on("data", (d) => (stderr += d.toString()));
+    // 3. Salva ZIP e Prévia no Supabase Storage (bucket documentos-gerados)
+    await salvarArquivosJob(jobId, [
+      { nome: "cartas_banco.zip", buffer: zipBuffer, contentType: "application/zip" },
+      { nome: previewNome, buffer: previewBuffer, contentType: "image/svg+xml" },
+    ]);
 
-    const code = await new Promise<number>((resolve) => {
-      proc.on("close", resolve);
-      proc.on("error", (e) => {
-        stderr += `\nFalha ao iniciar o processo Python: ${e.message}`;
-        resolve(-1);
-      });
-    });
-
-    try {
-      await fs.writeFile(
-        path.join(outDir, "log.txt"),
-        `EXIT=${code}\n--- STDOUT ---\n${stdout}\n--- STDERR ---\n${stderr}`
-      );
-    } catch {}
-
-    if (code !== 0) {
-      const saida = `${stderr}\n${stdout}`;
-      let msg: string;
-      if (/ModuleNotFoundError: No module named '(\w+)'/.test(saida)) {
-        const mod = saida.match(/ModuleNotFoundError: No module named '(\w+)'/)![1];
-        msg = `Módulo Python "${mod}" ausente no servidor. Execute: pip install -r python/requirements.txt`;
-      } else {
-        const linhas = saida.trim().split("\n").filter(Boolean);
-        msg =
-          linhas.filter((l) => /(Error|error|ValueError|RuntimeError|Traceback|não encontrei|Nenhum|inválid)/.test(l)).pop() ||
-          linhas[linhas.length - 1] ||
-          "Falha ao processar a planilha.";
-      }
-      return NextResponse.json(
-        { ok: false, erro: `Não foi possível gerar as cartas: ${msg}` },
-        { status: 500 }
-      );
-    }
-
-    const resumo = JSON.parse(await fs.readFile(path.join(outDir, "resumo.json"), "utf-8"));
-
-    // Registra no Supabase
+    // 4. Registra o job na tabela public.jobs do Supabase
     try {
       await supabase.from("jobs").insert({
         id: jobId,
@@ -203,6 +71,8 @@ export async function POST(req: NextRequest) {
         status: "CONCLUIDO",
         data_carta: data,
         arquivo_entrada_path: nome,
+        arquivo_zip_path: `${jobId}/cartas_banco.zip`,
+        arquivo_preview_path: `${jobId}/${previewNome}`,
         total_beneficiarios: resumo.total || 0,
         resumo,
         finalizado_em: new Date().toISOString(),
@@ -211,7 +81,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ...resumo, jobId });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Erro inesperado.";
+    const msg = e instanceof Error ? e.message : "Erro inesperado ao gerar as cartas.";
     return NextResponse.json({ ok: false, erro: msg }, { status: 500 });
   }
 }
